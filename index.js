@@ -36,45 +36,53 @@ const run = async () => {
         const servicesCollection = client.db('doctors_portal').collection('services');
         const bookingCollection = client.db('doctors_portal').collection('booking');
         const userCollection = client.db('doctors_portal').collection('user');
+        const doctorCollection = client.db('doctors_portal').collection('doctors');
+
+        const verifyAdmin = async (req, res, next) => {
+            const requester = req.decoded.email;
+            const requesterAccount = await userCollection.findOne({ email: requester })
+            if (requesterAccount.roll === 'admin') {
+                next();
+            }
+            else {
+                res.status(403).send({ message: 'Forbidden' });
+            }
+        }
+
+
+
+        app.put('/user/admin/:email', verifyToken,verifyAdmin,  async (req, res) => {
+            const email = req.params.email;
+
+            const filter = { email: email }
+            const updateDoc = {
+                $set: {
+                    roll: 'admin',
+                },
+            };
+
+            const result = await userCollection.updateOne(filter, updateDoc)
+            res.send({ result, })
+        })
+
+        app.get('/admin/:email', async (req, res) => {
+            const email = req.params.email;
+
+            const user = await userCollection.findOne({ email: email })
+
+            const isAdmin = user.roll === 'admin';
+            res.send({ admin: isAdmin });
+
+        })
 
         app.get('/service', async (req, res) => {
             const query = {}
-            const cursor = servicesCollection.find(query);
+            const cursor = servicesCollection.find(query).project({ name: 1, });
             const result = await cursor.toArray()
             res.send(result)
         })
 
-        app.put('/user/admin/:email', verifyToken, async (req, res) => {
-            const email = req.params.email;
-            const requester = req.decoded.email;
-            const requesterAccount = await userCollection.findOne({ email: requester })
-            if (requesterAccount.roll === 'admin') {
-                const filter = { email: email }
-                const updateDoc = {
-                    $set: {
-                        roll: 'admin',
-                    },
-                };
 
-                const result = await userCollection.updateOne(filter, updateDoc)
-                res.send({ result, })
-            }
-            else{
-                res.status(403).send({message: 'Forbidden'});
-            }
-
-        })
-
-
-        app.get('/admin/:email', async (req, res)=>{
-            const email = req.params.email;
-          
-            const user = await userCollection.findOne({email: email})
-
-            const isAdmin = user.roll === 'admin';
-            res.send({admin: isAdmin});
-           
-        })
 
         app.put('/user/:email', async (req, res) => {
             const email = req.params.email;
@@ -95,7 +103,8 @@ const run = async () => {
         app.get('/user', verifyToken, async (req, res) => {
             const users = await userCollection.find({}).toArray();
             res.send(users)
-        })
+        });
+        
         /**
          * API Naming convention
          * app.get('/booking') // get all booking in this collection or get more then one or by filter
@@ -168,6 +177,13 @@ const run = async () => {
 
             })
             res.send(services)
+        })
+
+
+        app.post('/doctor', verifyToken, async (req, res) => {
+            const doctor = req.body;
+            const result = await doctorCollection.insertOne(doctor)
+            res.send(result)
         })
     }
     finally {
