@@ -11,7 +11,10 @@ app.use(cors())
 app.use(express.json());
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
+
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.y1q9j.mongodb.net/myFirstDatabase?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
 
@@ -37,10 +40,11 @@ const run = async () => {
         const bookingCollection = client.db('doctors_portal').collection('booking');
         const userCollection = client.db('doctors_portal').collection('user');
         const doctorCollection = client.db('doctors_portal').collection('doctors');
+        const paymentCollection = client.db('doctors_portal').collection('payments');
 
         const verifyAdmin = async (req, res, next) => {
             const requester = req.decoded.email;
-            
+
             const requesterAccount = await userCollection.findOne({ email: requester })
             if (requesterAccount.roll === 'admin') {
                 next();
@@ -52,7 +56,7 @@ const run = async () => {
 
 
 
-        app.put('/user/admin/:email', verifyToken,verifyAdmin,  async (req, res) => {
+        app.put('/user/admin/:email', verifyToken, verifyAdmin, async (req, res) => {
             const email = req.params.email;
 
             const filter = { email: email }
@@ -130,6 +134,13 @@ const run = async () => {
             }
         })
 
+        app.get('/booking/:id', verifyToken, async (req, res) => {
+            const { id } = req.params;
+            const query = { _id: ObjectId(id) };
+            const booking = await bookingCollection.findOne(query);
+            res.send(booking)
+        })
+
         app.post('/booking', async (req, res) => {
             const booking = req.body
 
@@ -140,6 +151,25 @@ const run = async () => {
             }
             const result = await bookingCollection.insertOne(booking);
             res.send({ success: true, booking: result })
+        })
+
+        app.put('/booking/:id',verifyToken, async(req, res)=>{
+            const {id} = req.params;
+           
+            
+            const filter = {_id: ObjectId(id)}
+            console.log(req.body.transactionId)
+            const updateDoc = {
+                $set: {
+                    paid: true,
+                    transactionId: req.body.transactionId,
+                }
+            }
+            const update = await bookingCollection.updateOne(filter, updateDoc);
+            const result = await paymentCollection.insertOne(req.body);
+
+            res.send(update);
+            
         })
 
 
@@ -180,10 +210,10 @@ const run = async () => {
             res.send(services)
         })
 
-        app.get('/doctor', verifyToken,verifyAdmin,async(req, res)=>{
+        app.get('/doctor', verifyToken, verifyAdmin, async (req, res) => {
             const doctors = await doctorCollection.find({}).toArray()
             res.send(doctors)
-        } )
+        })
 
         app.post('/doctor', verifyToken, verifyAdmin, async (req, res) => {
             const doctor = req.body;
@@ -193,9 +223,26 @@ const run = async () => {
 
         app.delete('/doctor/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
-            const filter = {email: email}
+            const filter = { email: email }
             const result = await doctorCollection.deleteOne(filter)
             res.send(result)
+        })
+
+        app.post('/create-payment-intent', verifyToken, async (req, res) => {
+            const { price } = req.body;
+
+            const amount = Number(price) * 100;
+
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: ['card'],
+
+            });
+
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            });
         })
     }
     finally {
@@ -206,10 +253,10 @@ const run = async () => {
 
 run().catch(console.dir)
 
-console.log('rakibul %s eteer6t ', 534554)
+
 
 app.get('/', (req, res) => {
-    
+
     res.send('server connect successfully')
 })
 app.listen(port, () => {
