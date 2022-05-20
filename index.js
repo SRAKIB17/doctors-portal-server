@@ -40,6 +40,7 @@ const run = async () => {
 
         const verifyAdmin = async (req, res, next) => {
             const requester = req.decoded.email;
+            
             const requesterAccount = await userCollection.findOne({ email: requester })
             if (requesterAccount.roll === 'admin') {
                 next();
@@ -104,7 +105,7 @@ const run = async () => {
             const users = await userCollection.find({}).toArray();
             res.send(users)
         });
-        
+
         /**
          * API Naming convention
          * app.get('/booking') // get all booking in this collection or get more then one or by filter
@@ -179,10 +180,21 @@ const run = async () => {
             res.send(services)
         })
 
+        app.get('/doctor', verifyToken,verifyAdmin,async(req, res)=>{
+            const doctors = await doctorCollection.find({}).toArray()
+            res.send(doctors)
+        } )
 
-        app.post('/doctor', verifyToken, async (req, res) => {
+        app.post('/doctor', verifyToken, verifyAdmin, async (req, res) => {
             const doctor = req.body;
             const result = await doctorCollection.insertOne(doctor)
+            res.send(result)
+        })
+
+        app.delete('/doctor/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            const filter = {email: email}
+            const result = await doctorCollection.deleteOne(filter)
             res.send(result)
         })
     }
@@ -194,9 +206,10 @@ const run = async () => {
 
 run().catch(console.dir)
 
-
+console.log('rakibul %s eteer6t ', 534554)
 
 app.get('/', (req, res) => {
+    
     res.send('server connect successfully')
 })
 app.listen(port, () => {
